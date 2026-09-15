@@ -1,63 +1,94 @@
 # Fixdock
 
-Fixdock — личная menu bar утилита для macOS, которая удерживает Dock на выбранном пользователем мониторе.
+Fixdock is a macOS menu-bar utility that keeps the Dock on the display selected by the user.
 
-## Текущий статус
+## Install with Codex
 
-Переключение выбранного экрана всё ещё не переносит Dock автоматически. Сейчас приложение умеет закреплять Dock на уже выбранном экране и гасить edge-жесты на остальных экранах, но при выборе другого экрана требуется штатно подвести курсор к краю этого экрана один раз. Некурсорный механизм переноса пока остаётся открытой задачей.
+Give Codex this prompt:
 
-## Как это работает
+> Install Fixdock from https://github.com/vitalyterenin/fixdock. Clone the repository, run `Scripts/install-app.sh`, run `Scripts/verify-install.sh`, and then guide me through enabling only Fixdock under Privacy & Security → Accessibility. Do not enable unrelated permissions.
 
-Fixdock держит Dock на выбранном экране через мягкий фильтр edge-жеста: курсор можно свободно водить по мониторам, но жест вызова Dock на невыбранных экранах гасится у самого края. Текущий экран Dock определяется через приватный `SLSGetDockRectWithOrientation`, а `CGWindowListCopyWindowInfo` используется как запасной источник.
+The repository is currently private, so the GitHub account used by Codex must have access to it.
 
-В интерфейсе есть одна настройка: `Экран Dock`. Под ней показан список мониторов; вы выбираете один монитор, а приложение само включает нужный системный режим. Отдельных режимов “защита”, “разрешить перенос” и “закрепить текущее положение” больше нет.
+## Install from Terminal
 
-При выборе другого экрана Fixdock больше не двигает видимый курсор автоматически. Если Dock ещё не на выбранном экране, меню просит один раз подвести курсор к краю выбранного экрана; после штатного переноса Dock приложение закрепляет этот экран и продолжает подавлять edge-жесты на остальных экранах.
+Requirements:
 
-Некурсорный перенос исследуется отдельно в `Experiments/SkyLightDockDisplaySwitch` и `Experiments/DockSidecarProbe`.
-
-## Сборка
+- macOS 14 or later;
+- Xcode Command Line Tools with Swift;
+- access to this repository.
 
 ```bash
-cd /Users/vitalyterenin/Projects/Personal/Fixdock
+git clone https://github.com/vitalyterenin/fixdock.git
+cd fixdock
+Scripts/install-app.sh
+Scripts/verify-install.sh
+```
+
+Fixdock is installed at `~/Applications/Fixdock.app` and starts immediately.
+
+### One-time macOS setup
+
+1. Open the Fixdock menu-bar icon.
+2. Choose `Open Accessibility Settings`.
+3. Enable Fixdock under `Privacy & Security → Accessibility`.
+4. Optionally choose `Launch at Login` in the Fixdock menu.
+
+Fixdock never opens the Accessibility permission prompt automatically. Input Monitoring is not required.
+
+## Stable local signing
+
+The first build creates a private self-signed code-signing identity under:
+
+```text
+~/Library/Application Support/Fixdock/Signing
+```
+
+The same identity is reused for later builds on that Mac, so macOS can keep the Accessibility grant instead of treating every rebuild as unrelated code. The private key never belongs in the repository and must not be shared between users.
+
+This local-source installation is intentionally different from distributing a downloadable app binary. A public binary release with the normal Gatekeeper experience requires an Apple Developer ID certificate and notarisation.
+
+## Use
+
+Choose the target under `Dock Display` in the menu-bar app.
+
+Fixdock can:
+
+- lock the Dock to the display where it already is;
+- suppress the Dock edge gesture on non-selected displays through Accessibility;
+- enable normal macOS switching when another display is selected;
+- lock the Dock again after one manual edge gesture on the selected display.
+
+Fixdock does not automatically move the Dock to another display. The old implementation that moved the visible pointer was removed and must not return. Cursor-free transfer is researched separately under `Experiments/`.
+
+## Build only
+
+```bash
 Scripts/build-app.sh
 ```
 
-Готовое приложение появится здесь:
+The app is produced at `.build/app/Fixdock.app`.
 
-```text
-.build/app/Fixdock.app
-```
+## How it works
 
-## Установка и запуск
+Fixdock writes the internal `com.apple.dock allow-display-switching` preference and uses an Accessibility event tap to suppress the Dock edge gesture on non-selected displays. It detects the current Dock display from the real Dock window, with private `SLSGetDockRectWithOrientation` as a fallback.
 
-```bash
-Scripts/install-app.sh
-```
+This is not a system-process patch. Apple may change the internal Dock behaviour in future macOS releases.
 
-Приложение устанавливается сюда:
+## Project structure
 
-```text
-~/Applications/Fixdock.app
-```
+- `Sources/Fixdock/AppDelegate.swift` — menu-bar UI, display selection, and orchestration.
+- `Sources/Fixdock/MouseEdgeGuard.swift` — Accessibility event tap.
+- `Sources/Fixdock/DockSystemController.swift` — Dock-display detection and preference control.
+- `Sources/Fixdock/DisplayManager.swift` — display list and coordinates.
+- `Scripts/setup-signing.sh` — creates or reuses the per-Mac signing identity.
+- `Scripts/build-app.sh` — builds and signs the app.
+- `Scripts/install-app.sh` — installs and launches the app.
+- `Scripts/verify-install.sh` — verifies the installed bundle and signature.
 
-## Использование
-
-В menu bar появится иконка Fixdock. В меню можно выбрать экран под заголовком `Экран Dock` и завершить приложение.
-
-Для текущего режима нужен Accessibility-доступ: без него macOS не даёт приложению фильтровать edge-жест Dock. Input Monitoring не нужен.
-
-Если после локальной пересборки защита не работает, проверьте меню Fixdock. Статус `нужен Accessibility` означает, что macOS не дала приложению поставить event tap. Откройте пункт `Открыть Accessibility` и разрешите `/Users/vitalyterenin/Applications/Fixdock.app` в `Privacy & Security → Accessibility`. Локальная ad-hoc подпись меняется при пересборках, поэтому macOS может потребовать снять и поставить галочку заново.
-
-## Откат системной настройки
-
-Если нужно вернуть стандартное поведение Dock вручную:
+## Restore normal Dock behaviour
 
 ```bash
 defaults delete com.apple.dock allow-display-switching
 killall Dock
 ```
-
-## Ограничения
-
-Это не патч системного процесса. Приложение меняет внутреннюю настройку Dock, которую Apple может изменить в будущих версиях macOS. Перед распространением другим пользователям понадобится отдельная проверка, подпись Developer ID и notarization.

@@ -10,13 +10,13 @@ enum DockEdge: String, CaseIterable, Sendable {
     var localizedTitle: String {
         switch self {
         case .bottom:
-            "Снизу"
+            "Bottom"
         case .left:
-            "Слева"
+            "Left"
         case .right:
-            "Справа"
+            "Right"
         case .top:
-            "Сверху"
+            "Top"
         }
     }
 
@@ -43,7 +43,7 @@ struct DisplayInfo: Identifiable, Equatable, Sendable {
 
     var displayName: String {
         if isMain {
-            "\(name) (основной)"
+            "\(name) (Main)"
         } else {
             name
         }

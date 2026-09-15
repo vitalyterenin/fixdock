@@ -3,3 +3,7 @@
 .DS_Store
 *.xcuserdata/
 DerivedData/
+*.key.pem
+*.cert.pem
+*.keychain-db
+*.p12

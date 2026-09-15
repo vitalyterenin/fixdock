@@ -9,7 +9,6 @@ final class MouseEdgeGuard {
     private var targetDisplayID: CGDirectDisplayID?
     private var dockEdge: DockEdge = .bottom
     private var previousLocation: CGPoint?
-    private var didRequestAccessibility = false
 
     var isRunning: Bool {
         eventTap != nil
@@ -32,7 +31,6 @@ final class MouseEdgeGuard {
         }
 
         guard isAccessibilityTrusted else {
-            requestAccessibilityOnce()
             return false
         }
 
@@ -67,16 +65,6 @@ final class MouseEdgeGuard {
         }
         CGEvent.tapEnable(tap: tap, enable: true)
         return true
-    }
-
-    private func requestAccessibilityOnce() {
-        guard !didRequestAccessibility else {
-            return
-        }
-
-        didRequestAccessibility = true
-        let promptKey = "AXTrustedCheckOptionPrompt"
-        AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
     }
 
     func stop() {

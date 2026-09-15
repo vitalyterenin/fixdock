@@ -1,56 +1,74 @@
 # SkyLightDockDisplaySwitch
 
-Эксперимент для проверки переноса Dock между managed displays через приватные SkyLight API без движения видимого курсора.
+An experiment for testing Dock transfer between managed displays through private SkyLight APIs without moving the visible cursor.
 
-## Запуск read-only диагностики
+## Current result
+
+No working Dock-transfer path has been found yet.
+
+Confirmed:
+
+- `SLSCopyManagedDisplays`, `SLSCopyBestManagedDisplayForRect`, `SLSManagedDisplayGetCurrentSpace`, `SLSManagedDisplaysCopyRoleWindows`, `SLSGetDockRectWithOrientation`, and `SLSSetDockRectWithOrientation` resolve through `dlopen`.
+- `SLSGetDockRectWithOrientation` reads reliably with four arguments: connection, `CGRect*`, orientation, and reason.
+- `SLSSetDockRectWithOrientation` and `SLSSetDockRectWithReason` can change the Dock rectangle in WindowServer.
+
+Unresolved:
+
+- changing the Dock rectangle does not move the actual Dock window reported by `CGWindowListCopyWindowInfo`;
+- role windows in the tested range did not match the Dock window;
+- production transfer is allowed only after proving that the Dock window moves, cursor location remains unchanged, and the Dock PID does not change.
+
+## Run read-only diagnostics
 
 ```bash
-cd /Users/vitalyterenin/Projects/Personal/Fixdock/Experiments/SkyLightDockDisplaySwitch
+cd /Users/vitalyterenin/Projects/Personal/fixdock/Experiments/SkyLightDockDisplaySwitch
 swift run SkyLightDockDisplaySwitch
 ```
 
-Диагностика печатает:
+Diagnostics print:
 
-- `CGDirectDisplayID`, bounds и managed display identifier для каждого активного экрана;
-- текущий Dock rect из `SLSGetDockRectWithOrientation`;
-- текущее окно Dock из `CGWindowListCopyWindowInfo`;
-- managed display role windows для выбранного диапазона ролей;
-- позицию курсора до и после запуска.
+- `CGDirectDisplayID`, bounds, and managed-display identifier for each active display;
+- current Dock rectangle from `SLSGetDockRectWithOrientation`;
+- current Dock window from `CGWindowListCopyWindowInfo`;
+- managed-display role windows for the selected role range;
+- cursor position before and after execution.
 
-## Поиск role window
+## Search role windows
 
 ```bash
 swift run SkyLightDockDisplaySwitch --scan-roles 0...32
 ```
 
-Если какая-то роль содержит window id Dock, это кандидат для следующего write-эксперимента.
+If a role contains the Dock window ID, it is a candidate for the next write experiment.
 
-## Write-эксперимент
+## Write experiment
 
 ```bash
 swift run SkyLightDockDisplaySwitch --target-display <CGDirectDisplayID> --set-role-window <role> --apply
 ```
 
-`--apply` обязателен, чтобы случайный запуск не менял состояние WindowServer. Перед использованием нужно вручную проверить, что выбранная `role` действительно соответствует Dock window.
+`--apply` is mandatory so an accidental run cannot change WindowServer state. Before use, manually confirm that the selected `role` really corresponds to the Dock window.
 
-## Reversible Dock rect test
+Do not run write modes blindly. This experiment uses private WindowServer APIs.
+
+## Reversible Dock-rectangle test
 
 ```bash
 swift run SkyLightDockDisplaySwitch --target-display <CGDirectDisplayID> --test-dock-rect --apply
 ```
 
-Этот тест вызывает `SLSSetDockRectWithOrientation` с rect на целевом экране, ждёт короткое время, печатает состояние и по умолчанию возвращает исходный rect.
+This calls `SLSSetDockRectWithOrientation` with a rectangle on the target display, waits briefly, prints state, and restores the original rectangle by default.
 
-Чтобы не возвращать rect автоматически:
+To keep the rectangle instead:
 
 ```bash
 swift run SkyLightDockDisplaySwitch --target-display <CGDirectDisplayID> --test-dock-rect --keep-dock-rect --apply
 ```
 
-## Reversible Dock rect with reason test
+## Reversible Dock-rectangle-with-reason test
 
 ```bash
 swift run SkyLightDockDisplaySwitch --target-display <CGDirectDisplayID> --test-dock-rect-reason --apply
 ```
 
-Этот тест вызывает `SLSSetDockRectWithReason`, ждёт короткое время, печатает состояние и по умолчанию возвращает исходный rect. На текущей конфигурации он меняет Dock rect в WindowServer, но фактическое окно Dock остаётся на исходном display.
+This calls `SLSSetDockRectWithReason`, waits briefly, prints state, and restores the original rectangle by default. In the current configuration it changes the Dock rectangle in WindowServer, but the actual Dock window stays on the original display.

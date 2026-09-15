@@ -4,37 +4,9 @@ import Foundation
 final class SettingsStore {
     private enum Key {
         static let targetDisplayID = "targetDisplayID"
-        static let oldDefaultsSuiteName = "local.vitalyterenin.DockAnchor"
-        static let obsoleteKeys = [
-            "isPaused",
-            "hasPromptedForAccessibility",
-            "showsEdgeShields"
-        ]
     }
 
     private let defaults = UserDefaults.standard
-
-    init() {
-        migrateFromDockAnchorDefaultsIfNeeded()
-
-        for key in Key.obsoleteKeys {
-            defaults.removeObject(forKey: key)
-        }
-    }
-
-    private func migrateFromDockAnchorDefaultsIfNeeded() {
-        guard
-            defaults.object(forKey: Key.targetDisplayID) == nil,
-            let oldDefaults = UserDefaults(suiteName: Key.oldDefaultsSuiteName)
-        else {
-            return
-        }
-
-        let oldDisplayID = oldDefaults.integer(forKey: Key.targetDisplayID)
-        if oldDisplayID > 0 {
-            defaults.set(oldDisplayID, forKey: Key.targetDisplayID)
-        }
-    }
 
     var targetDisplayID: CGDirectDisplayID? {
         get {
