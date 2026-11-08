@@ -65,7 +65,10 @@ dispatch on a matching tag publishes. Pages uses Actions and `github-pages`
 allows `v*` tags. Keep release immutability off for old-DMG cleanup.
 
 The macOS job imports the pinned certificate into an isolated CI keychain and
-restores the runner's search list. It builds arm64 code and helpers, embeds notices
+restores the runner's search list after import. During codesigning only, the
+isolated keychain is temporarily included in the CI search list so macOS 15 can
+find its private key; a finally block restores the exact prior list on success or
+failure. Local signing never changes that list. It builds arm64 code and helpers, embeds notices
 before signing, verifies certificate-bound requirements, and creates an APFS DMG
 with Applications shortcut. It mounts the image read-only for checks, verifies
 prior signed feed/build monotonicity, and signs/verifies archive and single-entry

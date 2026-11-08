@@ -73,14 +73,26 @@ def sign(app):
     args = ['codesign', '--force', '--sign', identity, '--timestamp=none']
     if keychain:
         args += ['--keychain', keychain]
-    for code in components(app):
-        run(*args, code)
-    if keychain:
-        verify(app)
-        print('Signed app and updater with the persistent release identity')
-    else:
-        run('codesign', '--verify', '--deep', '--strict', app)
-        print('Ad hoc development build; release packaging will reject this identity')
+    # macOS 15 also needs the private-key keychain on the search list, even
+    # with codesign --keychain. Scope that change to this disposable CI runner;
+    # local/source signing never rewrites the user's search list.
+    search = None
+    if keychain and os.environ.get('GITHUB_ACTIONS') == 'true':
+        search = shlex.split(run('security', 'list-keychains', '-d', 'user'))
+    try:
+        if search is not None:
+            run('security', 'list-keychains', '-d', 'user', '-s', keychain, *search)
+        for code in components(app):
+            run(*args, code)
+        if keychain:
+            verify(app)
+            print('Signed app and updater with the persistent release identity')
+        else:
+            run('codesign', '--verify', '--deep', '--strict', app)
+            print('Ad hoc development build; release packaging will reject this identity')
+    finally:
+        if search is not None:
+            run('security', 'list-keychains', '-d', 'user', '-s', *search)
 
 
 def import_ci(keychain):

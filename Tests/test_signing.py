@@ -48,5 +48,30 @@ class SigningIdentityTests(unittest.TestCase):
             command.assert_not_called()
 
 
+    def test_ci_restores_exact_search_list_after_success_or_signing_failure(self):
+        for failing in [False, True]:
+            calls = []
+            def command(*args):
+                calls.append(args)
+                if args == ('security', 'list-keychains', '-d', 'user'):
+                    return '"/runner/login keychain"\n"/runner/system.keychain"'
+                if args[0] == 'codesign' and failing:
+                    raise ValueError('codesign failed')
+                return ''
+            with patch.dict(signing.os.environ, {'GITHUB_ACTIONS':'true', 'FIXDOCK_SIGN_KEYCHAIN':'/runner/isolated.keychain', 'FIXDOCK_REQUIRE_RELEASE_SIGNING':'1'}), patch.object(signing,'run',side_effect=command), patch.object(signing,'components',return_value=[Path('Fixdock.app')]), patch.object(signing,'verify'):
+                if failing:
+                    with self.assertRaisesRegex(ValueError,'codesign failed'): signing.sign(Path('Fixdock.app'))
+                else:
+                    signing.sign(Path('Fixdock.app'))
+            self.assertEqual(calls[-1], ('security','list-keychains','-d','user','-s','/runner/login keychain','/runner/system.keychain'))
+            self.assertIn(('security','list-keychains','-d','user','-s','/runner/isolated.keychain','/runner/login keychain','/runner/system.keychain'),calls)
+
+    def test_local_signing_does_not_touch_keychain_search_list(self):
+        with patch.dict(signing.os.environ, {'GITHUB_ACTIONS':'', 'FIXDOCK_SIGN_KEYCHAIN':'/local/identity.keychain'}), patch.object(signing,'run',return_value='') as command, patch.object(signing,'components',return_value=[Path('Fixdock.app')]), patch.object(signing,'verify'):
+            signing.sign(Path('Fixdock.app'))
+        self.assertTrue(command.call_args_list)
+        self.assertTrue(all(call.args[0]=='codesign' for call in command.call_args_list))
+
+
 if __name__ == '__main__':
     unittest.main()
