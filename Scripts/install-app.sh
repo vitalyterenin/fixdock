@@ -3,11 +3,11 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Fixdock"
-SOURCE_APP="$ROOT_DIR/.build/app/$APP_NAME.app"
+SOURCE_APP="${FIXDOCK_OUTPUT_DIR:-$HOME/Library/Developer/Fixdock}/$APP_NAME.app"
 DESTINATION_DIR="/Applications"
 DESTINATION_APP="$DESTINATION_DIR/$APP_NAME.app"
 
-"$ROOT_DIR/Scripts/build-app.sh" >/dev/null
+"$ROOT_DIR/Scripts/build-local-app.sh" >/dev/null
 
 pkill -x "$APP_NAME" 2>/dev/null || true
 for _ in {1..50}; do

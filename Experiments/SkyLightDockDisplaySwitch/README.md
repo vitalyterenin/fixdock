@@ -18,10 +18,12 @@ Unresolved:
 - role windows in the tested range did not match the Dock window;
 - production transfer is allowed only after proving that the Dock window moves, cursor location remains unchanged, and the Dock PID does not change.
 
+Run commands from the Fixdock repository root. These experiments are not shipped.
+
 ## Run read-only diagnostics
 
 ```bash
-cd /Users/vitalyterenin/Projects/Personal/fixdock/Experiments/SkyLightDockDisplaySwitch
+cd Experiments/SkyLightDockDisplaySwitch
 swift run SkyLightDockDisplaySwitch
 ```
 

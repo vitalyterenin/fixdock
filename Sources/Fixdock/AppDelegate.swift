@@ -4,6 +4,7 @@ import ServiceManagement
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let updates = UpdateController()
     private let settingsStore = SettingsStore()
     private let displayManager = DisplayManager()
     private let dockPreferences = DockPreferences()
@@ -31,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentDockDisplayID = dockSystemController.currentDockDisplayID(displays: displayManager.displays)
         selectedDisplayID = settingsStore.targetDisplayID ?? currentDockDisplayID ?? displayManager.normalizedTargetDisplayID(preferredID: nil)
         settingsStore.targetDisplayID = selectedDisplayID
+        updates.start()
         setupStatusItem()
         installObservers()
         updateProtection()
@@ -239,7 +241,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refreshMenu() {
         let menu = NSMenu()
 
-        let titleItem = NSMenuItem(title: "Fixdock", action: nil, keyEquivalent: "")
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
+        let titleItem = NSMenuItem(title: "Fixdock \(version)", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
 
@@ -281,10 +284,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        let updateMenu = NSMenu()
+        let checkItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+        checkItem.target = self
+        checkItem.isEnabled = updates.canCheck
+        updateMenu.addItem(checkItem)
+        for (title, action, enabled) in [
+            ("Automatically Check for Updates", #selector(toggleAutomaticChecks(_:)), updates.automaticallyChecks),
+            ("Automatically Install Updates", #selector(toggleAutomaticInstallation(_:)), updates.automaticallyInstalls)
+        ] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.state = enabled ? .on : .off
+            item.isEnabled = updates.isConfigured
+            updateMenu.addItem(item)
+        }
+        let updateItem = NSMenuItem(title: "Updates", action: nil, keyEquivalent: "")
+        updateItem.submenu = updateMenu
+        menu.addItem(updateItem)
+        menu.addItem(.separator())
+
         let quitItem = NSMenuItem(title: "Quit Fixdock", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
 
         statusItem?.menu = menu
+    }
+
+    @objc private func checkForUpdates(_ sender: Any?) { updates.check(sender) }
+    @objc private func toggleAutomaticChecks(_ sender: Any?) {
+        updates.setAutomaticChecks(!updates.automaticallyChecks)
+        refreshMenu()
+    }
+    @objc private func toggleAutomaticInstallation(_ sender: Any?) {
+        updates.setAutomaticInstallation(!updates.automaticallyInstalls)
+        refreshMenu()
+    }
+
+    // Build validation constructs the real menu without starting protection,
+    // modifying Dock preferences, requesting access, or checking the network.
+    func smokeTestMenu() -> Bool {
+        setupStatusItem()
+        guard let menu = statusItem?.menu,
+              menu.items.contains(where: { $0.title == "Dock Display" }),
+              let submenu = menu.items.first(where: { $0.title == "Updates" })?.submenu,
+              submenu.items.count == 3 else { return false }
+        return true
     }
 
     private func addDisplayItems(to menu: NSMenu) {

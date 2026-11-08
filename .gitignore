@@ -7,3 +7,6 @@ DerivedData/
 *.cert.pem
 *.keychain-db
 *.p12
+
+__pycache__/
+*.pyc
