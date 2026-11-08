@@ -9,7 +9,8 @@ Fixdock supports macOS 14+ on Apple Silicon with one stable channel.
 `release.json` owns version, increasing build, repository, permanent URLs, public
 Ed25519 key, approved MIT license, and release certificate SHA-256. Preserve bundle
 ID `local.vitalyterenin.Fixdock`, public update key, and `Resources/ReleaseSigning.cer`.
-The first downloadable release is 0.1.1 (build 2), following source-only 0.1.0.
+The first downloadable release is 0.1.2 (build 3), following source-only 0.1.0.
+The 0.1.1 tag failed CI signing before publishing any distribution.
 There is no prior public feed to migrate.
 
 - Download: https://github.com/vitalyterenin/fixdock/releases/latest/download/Fixdock.dmg
@@ -64,7 +65,10 @@ dispatch on a matching tag publishes. Pages uses Actions and `github-pages`
 allows `v*` tags. Keep release immutability off for old-DMG cleanup.
 
 The macOS job imports the pinned certificate into an isolated CI keychain and
-restores the runner's search list. It builds arm64 code and helpers, embeds notices
+restores the runner's search list after import. During codesigning only, the
+isolated keychain is temporarily included in the CI search list so macOS 15 can
+find its private key; a finally block restores the exact prior list on success or
+failure. Local signing never changes that list. It builds arm64 code and helpers, embeds notices
 before signing, verifies certificate-bound requirements, and creates an APFS DMG
 with Applications shortcut. It mounts the image read-only for checks, verifies
 prior signed feed/build monotonicity, and signs/verifies archive and single-entry
