@@ -11,7 +11,8 @@ Ed25519 key, approved MIT license, and release certificate SHA-256. Preserve bun
 ID `local.vitalyterenin.Fixdock`, public update key, and `Resources/ReleaseSigning.cer`.
 The first downloadable release is 0.1.2 (build 3), following source-only 0.1.0.
 The 0.1.1 tag failed CI signing before publishing any distribution.
-There is no prior public feed to migrate.
+The previous signed feed is read only from this repository's GitHub Pages URL.
+An unavailable feed stops the release; no alternate host or first-release reset is used.
 
 - Download: https://github.com/vitalyterenin/fixdock/releases/latest/download/Fixdock.dmg
 - Feed: https://vitalyterenin.github.io/fixdock/appcast.xml
