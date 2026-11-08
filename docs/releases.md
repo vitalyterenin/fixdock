@@ -15,7 +15,6 @@ There is no prior public feed to migrate.
 
 - Download: https://github.com/vitalyterenin/fixdock/releases/latest/download/Fixdock.dmg
 - Feed: https://vitalyterenin.github.io/fixdock/appcast.xml
-- Apps catalog: https://teren.in/apps/
 
 The pinned persistent self-signed certificate signs the app and updater helpers.
 It is not Developer ID or notarization. Users can need Open Anyway at first launch;
@@ -24,7 +23,7 @@ builds have a different identity and may need one Accessibility grant reset.
 
 Private backups stay outside source. Repository Secrets are `SPARKLE_PRIVATE_KEY`,
 `FIXDOCK_SIGNING_P12`, and `FIXDOCK_SIGNING_PASSWORD`. Publication uses GitHub's
-short-lived repository token. Website/cloud credentials do not belong here. PR
+short-lived repository token. No external hosting credentials are required. PR
 checks have no signing secrets and use ad hoc signatures rejected by packaging.
 
 ## Checks and documentation
@@ -45,20 +44,24 @@ Local-signing tests mock security tools. Diagnostics/menu checks do not start
 protection, write Dock settings, request permissions, or contact update hosts.
 
 Before every release, review README, AGENTS, this guide, HANDOFF, experiment
-READMEs, LICENSE, dependency notices, GitHub About, and the Apps card against the
+READMEs, LICENSE, dependency notices, and GitHub About against the
 whole app/configuration/workflow. Keep history labeled; correct current commands
 and claims. Verify links, commands, images, and changed Markdown rendering. Record
 scope, corrections, and actual verification in the PR before tagging.
 
 ## Publish
 
-1. Increase version/build, complete documentation, and prepare catalog changes.
+Build and package release artifacts only in GitHub Actions; publish the DMG on
+GitHub Releases and the signed feed on GitHub Pages. Local checks and development
+builds are not release artifacts. The personal website is outside this workflow;
+do not inspect or change its content, listings, redirects or infrastructure.
+
+1. Increase version/build and complete documentation.
 2. Push a PR, wait for checks, and merge its exact checked head normally.
 3. Tag the merged commit with matching `v<version>` and push the fresh tag.
 4. Wait for build and publish jobs in **Release Fixdock**.
 5. Verify public feed/DMG signatures, hashes, length, version/build, architecture,
    and complete notices inside the downloaded app and image.
-6. Deploy the Apps card through the separate website publication path.
 
 Branch pushes do not publish. Workflow dispatch on a branch prepares artifacts;
 dispatch on a matching tag publishes. Pages uses Actions and `github-pages`
