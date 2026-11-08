@@ -9,7 +9,8 @@ Fixdock supports macOS 14+ on Apple Silicon with one stable channel.
 `release.json` owns version, increasing build, repository, permanent URLs, public
 Ed25519 key, approved MIT license, and release certificate SHA-256. Preserve bundle
 ID `local.vitalyterenin.Fixdock`, public update key, and `Resources/ReleaseSigning.cer`.
-The first downloadable release is 0.1.1 (build 2), following source-only 0.1.0.
+The first downloadable release is 0.1.2 (build 3), following source-only 0.1.0.
+The 0.1.1 tag failed CI signing before publishing any distribution.
 There is no prior public feed to migrate.
 
 - Download: https://github.com/vitalyterenin/fixdock/releases/latest/download/Fixdock.dmg

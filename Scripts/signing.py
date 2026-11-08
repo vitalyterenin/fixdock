@@ -27,7 +27,8 @@ def run(*args):
     # Never print command arguments: keychain tools receive private passwords.
     result = subprocess.run([str(a) for a in args], capture_output=True, text=True)
     if result.returncode:
-        raise ValueError(f'{args[0]} failed (exit {result.returncode})')
+        detail = result.stderr.strip() if str(args[0]) == 'codesign' else ''
+        raise ValueError(f'{args[0]} failed (exit {result.returncode})' + (': ' + detail if detail else ''))
     return result.stdout + result.stderr
 
 
