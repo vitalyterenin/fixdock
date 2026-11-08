@@ -73,21 +73,9 @@ if ! security find-certificate -c "$SIGNING_IDENTITY" "$KEYCHAIN_PATH" >/dev/nul
     trap - EXIT
 fi
 
-KEYCHAIN_SEARCH_LIST=()
-KEYCHAIN_IS_SEARCHABLE=false
-while IFS= read -r keychain; do
-    keychain="${keychain#\"}"
-    keychain="${keychain%\"}"
-    [[ -z "$keychain" ]] && continue
-    KEYCHAIN_SEARCH_LIST+=("$keychain")
-    if [[ "$keychain" == "$KEYCHAIN_PATH" ]]; then
-        KEYCHAIN_IS_SEARCHABLE=true
-    fi
-done < <(security list-keychains -d user)
-
-if [[ "$KEYCHAIN_IS_SEARCHABLE" == false ]]; then
-    security list-keychains -d user -s "${KEYCHAIN_SEARCH_LIST[@]}" "$KEYCHAIN_PATH"
-fi
+# build-app.sh supplies codesign --keychain explicitly. Never parse and rewrite
+# the user's search list here: security's display output is not a path API.
+# In particular, losing the login keychain hides browser Safe Storage entries.
 
 chmod 600 "$KEYCHAIN_PATH"
 printf '%s\n' "$KEYCHAIN_PATH"

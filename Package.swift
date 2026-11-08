@@ -18,6 +18,7 @@ let package = Package(
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("ServiceManagement")
             ]
-        )
+        ),
+        .testTarget(name: "FixdockTests", dependencies: ["Fixdock"])
     ]
 )

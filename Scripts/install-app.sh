@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Fixdock"
 SOURCE_APP="$ROOT_DIR/.build/app/$APP_NAME.app"
-DESTINATION_DIR="$HOME/Applications"
+DESTINATION_DIR="/Applications"
 DESTINATION_APP="$DESTINATION_DIR/$APP_NAME.app"
 
 "$ROOT_DIR/Scripts/build-app.sh" >/dev/null

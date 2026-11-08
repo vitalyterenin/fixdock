@@ -1,5 +1,18 @@
 # Fixdock handoff
 
+## Publication review
+
+2026-11-08T12:25:43+01:00 — reviewed the local changes for publication to
+`vitalyterenin/fixdock` on `main` at the user's request. Added six event-filter
+regressions and reset stale pointer history when stopping the event tap. All
+11 Swift tests passed, signing-isolation checks and shell syntax checks passed,
+and the release app built with its stable signature verified. The signing test
+uses the repository's tracked `Scripts/` path casing. README now documents the
+existing visibility enforcement and normal-quit restoration behavior.
+
+This review did not install or launch a new app, reproduce the PCSX2 shutdown,
+or resolve the pending live validation recorded below.
+
 ## Goal
 
 Make Fixdock a utility that locks the Dock to a user-selected display and can switch the selected display without using the physical cursor as the transfer mechanism.
@@ -21,6 +34,23 @@ Do not:
 
 If a hypothesis requires physical-cursor movement, reject it and do not implement it.
 
+## Current lock repair
+
+The current app also enforces Dock visibility: autohide is disabled and locked,
+Option-Command-D and Fn-A are filtered, and external visibility changes trigger
+a corrective Dock restart. Normal quit restores the persisted visibility
+snapshot. This visibility repair supersedes the historical blanket restart
+restriction below; restarting Dock must never be used to transfer it.
+
+2026-11-07T20:30:54+01:00 — installed a signed local repair after the Dock moved during PCSX2 shutdown.
+
+- Missing or unexpected Dock observations never authorize switching. Only an explicit display selection can request a manual transfer; it requires a detected Dock, connected displays, and a live Accessibility event tap. Arrival consumes the request.
+- Screen and Space changes preserve the saved target. An unavailable target stays selected.
+- Event-tap health uses the actual enabled/valid state and retries recovery. The first mouse event at a forbidden edge is filtered; locations outside that display are excluded.
+- Preference reads use synchronized Core Foundation preferences instead of spawning `defaults` on the event-tap run loop. Common-mode polling and workspace notifications recheck protection.
+- Five policy regressions passed. The installed app completed eight native fullscreen transitions across both displays plus presentation-mode hiding/window teardown, with 787 samples and no unlock or detected relocation. Dock PID 984 remained unchanged during this test.
+- The exact PCSX2 shutdown/crash was not reproduced. User validation in that application remains pending. No GitHub writes were made.
+
 ## Project state
 
 Project path:
@@ -32,7 +62,7 @@ Project path:
 Installed app:
 
 ```text
-/Users/vitalyterenin/Applications/Fixdock.app
+/Applications/Fixdock.app
 ```
 
 Bundle ID: `local.vitalyterenin.Fixdock`.
@@ -53,7 +83,7 @@ Key files:
 - `Experiments/SkyLightDockDisplaySwitch/` — Swift CLI for private SkyLight/CoreGraphics Services hypotheses.
 - `Experiments/DockSidecarProbe/` — Swift CLI for the `com.apple.dock.sidecar` XPC endpoint.
 
-Current state as of 2026-05-02T00:16:39+02:00:
+Historical baseline as of 2026-05-02T00:16:39+02:00 (the lock repair above supersedes its automatic unlock behavior):
 
 - Automatic Dock transfer on choosing a different display still does not work.
 - Production can lock the Dock where it already is and suppress edge gestures elsewhere when Accessibility is available.
@@ -82,7 +112,7 @@ Works:
 Not acceptable:
 
 - any solution that moves the visible user cursor;
-- background `killall Dock` or timer-based Dock restarts, which cause display flashing;
+- background `killall Dock` or timer-based Dock restarts as a transfer mechanism, which cause display flashing; conditional visibility repair is the existing exception described above;
 - a broad invisible edge strip that makes cursor motion feel obstructed;
 - UI with separate protection/lock/allow-switching modes: selection of one display is the sole control.
 
@@ -177,7 +207,7 @@ The app is not in standard application directories, so linked frameworks, entitl
 
 ## Direction 4: window visibility limitation
 
-`currentDockDisplayID` can return `nil` when `CGWindowListCopyWindowInfo` does not expose Dock or the SkyLight fallback lacks a valid rectangle. Current implementation checks the real Dock window, then `SLSGetDockRectWithOrientation`; if still unknown, it enables `allow-display-switching = true` so the user can perform a normal manual edge gesture. Do not add Screen Recording without need: it worsens onboarding.
+`currentDockDisplayID` can return `nil` when `CGWindowListCopyWindowInfo` does not expose Dock or the SkyLight fallback lacks a valid rectangle. Current implementation checks the real Dock window, then `SLSGetDockRectWithOrientation`; if still unknown, it keeps `allow-display-switching = false`. Unknown observations must never request or authorize a transfer. Do not add Screen Recording without need: it worsens onboarding.
 
 ## Direction 5: fallback without programmatic cursor movement
 
@@ -193,7 +223,7 @@ Only the user decides whether to perform that gesture.
 
 - Never use visible-cursor movement as a production mechanism.
 - Do not restore `DockRelocator`, `CGWarpMouseCursorPosition`, `NSCursor.hide()`, or synthetic mouse-move transfer.
-- Do not use `killall Dock` in the background or on a timer.
+- Do not use `killall Dock` in the background or on a timer to transfer Dock. Preserve the existing conditional visibility repair described above.
 - Do not add visible menu modes or restore the old multi-button model.
 - Do not impede free cursor movement on a second display or block entire lower/side areas.
 

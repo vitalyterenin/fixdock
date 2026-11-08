@@ -6,16 +6,71 @@ import Foundation
 final class DockSystemController {
     private let dockDomain = "com.apple.dock"
     private let allowDisplaySwitchingKey = "allow-display-switching"
+    private let autoHideKey = "autohide"
+    private let autoHideLockKey = "autohide-immutable"
     private let dockPreferencesChangedNotification = Notification.Name("com.apple.dock.prefchanged")
     private lazy var skyLightDockRectReader = SkyLightDockRectReader()
 
     var isDisplaySwitchingAllowed: Bool {
-        let result = runDefaults(arguments: ["read", dockDomain, allowDisplaySwitchingKey])
-        guard result.exitCode == 0 else {
-            return true
+        booleanPreference(allowDisplaySwitchingKey) ?? true
+    }
+
+    var isAutoHideEnabled: Bool {
+        booleanPreference(autoHideKey) ?? false
+    }
+
+    var autoHideLockValue: Bool? {
+        booleanPreference(autoHideLockKey)
+    }
+
+    private func booleanPreference(_ key: String) -> Bool? {
+        // Read external changes without spawning a process on the event-tap run loop.
+        CFPreferencesAppSynchronize(dockDomain as CFString)
+        return (CFPreferencesCopyAppValue(key as CFString, dockDomain as CFString) as? NSNumber)?.boolValue
+    }
+
+    func setAutoHideLockValue(_ value: Bool?) {
+        let arguments: [String]
+        if let value {
+            arguments = ["write", dockDomain, autoHideLockKey, "-bool", value ? "true" : "false"]
+        } else {
+            arguments = ["delete", dockDomain, autoHideLockKey]
         }
 
-        return result.output.trimmingCharacters(in: .whitespacesAndNewlines) != "0"
+        _ = runDefaults(arguments: arguments)
+        DistributedNotificationCenter.default().postNotificationName(
+            dockPreferencesChangedNotification,
+            object: nil
+        )
+    }
+
+    func reloadDock() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        process.arguments = ["Dock"]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            // The next Dock launch will read the updated preferences.
+        }
+    }
+
+    func setAutoHideEnabled(_ enabled: Bool) {
+        _ = runDefaults(arguments: [
+            "write",
+            dockDomain,
+            autoHideKey,
+            "-bool",
+            enabled ? "true" : "false"
+        ])
+        DistributedNotificationCenter.default().postNotificationName(
+            dockPreferencesChangedNotification,
+            object: nil
+        )
     }
 
     func setDisplaySwitchingAllowed(_ allowed: Bool) {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="Fixdock"
-APP_PATH="${1:-$HOME/Applications/$APP_NAME.app}"
+APP_PATH="${1:-/Applications/$APP_NAME.app}"
 EXPECTED_BUNDLE_ID="local.vitalyterenin.Fixdock"
 
 if [[ ! -d "$APP_PATH" ]]; then

@@ -11,7 +11,8 @@ final class MouseEdgeGuard {
     private var previousLocation: CGPoint?
 
     var isRunning: Bool {
-        eventTap != nil
+        guard let eventTap, CFMachPortIsValid(eventTap) else { return false }
+        return CGEvent.tapIsEnabled(tap: eventTap)
     }
 
     var isAccessibilityTrusted: Bool {
@@ -26,8 +27,14 @@ final class MouseEdgeGuard {
 
     @discardableResult
     func start() -> Bool {
-        guard eventTap == nil else {
-            return true
+        if let eventTap {
+            if CFMachPortIsValid(eventTap), isAccessibilityTrusted {
+                if !CGEvent.tapIsEnabled(tap: eventTap) {
+                    CGEvent.tapEnable(tap: eventTap, enable: true)
+                }
+                if isRunning { return true }
+            }
+            stop()
         }
 
         guard isAccessibilityTrusted else {
@@ -36,8 +43,8 @@ final class MouseEdgeGuard {
 
         let eventMask = CGEventMask(
             (1 << CGEventType.mouseMoved.rawValue) |
-            (1 << CGEventType.tapDisabledByTimeout.rawValue) |
-            (1 << CGEventType.tapDisabledByUserInput.rawValue)
+            (1 << CGEventType.keyDown.rawValue) |
+            (1 << CGEventType.keyUp.rawValue)
         )
 
         guard let tap = CGEvent.tapCreate(
@@ -64,12 +71,14 @@ final class MouseEdgeGuard {
             CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         }
         CGEvent.tapEnable(tap: tap, enable: true)
-        return true
+        return isRunning
     }
 
     func stop() {
+        previousLocation = nil
         if let eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
+            CFMachPortInvalidate(eventTap)
             self.eventTap = nil
         }
 
@@ -79,12 +88,16 @@ final class MouseEdgeGuard {
         }
     }
 
-    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
             return Unmanaged.passUnretained(event)
+        }
+
+        if type == .keyDown || type == .keyUp {
+            return shouldSuppressDockHidingShortcut(event: event) ? nil : Unmanaged.passUnretained(event)
         }
 
         guard type == .mouseMoved else {
@@ -96,6 +109,21 @@ final class MouseEdgeGuard {
         }
 
         return Unmanaged.passUnretained(event)
+    }
+
+    private func shouldSuppressDockHidingShortcut(event: CGEvent) -> Bool {
+        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        let modifiers = event.flags.intersection([
+            .maskCommand,
+            .maskAlternate,
+            .maskControl,
+            .maskShift,
+            .maskSecondaryFn
+        ])
+
+        // macOS uses Option-Command-D and, on newer releases, Fn-A to toggle Dock visibility.
+        return (keyCode == 2 && modifiers == [.maskCommand, .maskAlternate]) ||
+            (keyCode == 0 && modifiers == [.maskSecondaryFn])
     }
 
     private func shouldSuppressDockTrigger(event: CGEvent) -> Bool {
@@ -120,11 +148,9 @@ final class MouseEdgeGuard {
     }
 
     private func isAtDockTriggerEdge(location: CGPoint, previousLocation: CGPoint?, display: DisplayInfo) -> Bool {
-        guard let previousLocation else {
-            return false
-        }
-
         let frame = display.quartzFrame
+        guard frame.contains(location) else { return false }
+        let previousLocation = previousLocation ?? location
         let edgeThickness: CGFloat = 3
 
         switch dockEdge {

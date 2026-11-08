@@ -16,9 +16,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentDockDisplayID: CGDirectDisplayID?
     private var dockEdge: DockEdge = .bottom
     private var lastStatusMessage = ""
+    private var dockVisibilitySnapshot: DockVisibilitySnapshot?
+    private var lockPolicy = DockLockPolicy()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        let snapshot = settingsStore.dockVisibilitySnapshot ?? DockVisibilitySnapshot(
+            isAutoHideEnabled: dockSystemController.isAutoHideEnabled,
+            autoHideLockValue: dockSystemController.autoHideLockValue
+        )
+        settingsStore.dockVisibilitySnapshot = snapshot
+        dockVisibilitySnapshot = snapshot
         dockEdge = dockPreferences.currentEdge
         currentDockDisplayID = dockSystemController.currentDockDisplayID(displays: displayManager.displays)
         selectedDisplayID = settingsStore.targetDisplayID ?? currentDockDisplayID ?? displayManager.normalizedTargetDisplayID(preferredID: nil)
@@ -31,8 +39,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         updateTimer?.invalidate()
+        DistributedNotificationCenter.default().removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         mouseEdgeGuard.stop()
         dockSystemController.setDisplaySwitchingAllowed(true)
+        if let dockVisibilitySnapshot {
+            let needsDockReload = dockSystemController.autoHideLockValue != dockVisibilitySnapshot.autoHideLockValue ||
+                dockSystemController.isAutoHideEnabled != dockVisibilitySnapshot.isAutoHideEnabled
+            if needsDockReload {
+                dockSystemController.setAutoHideLockValue(dockVisibilitySnapshot.autoHideLockValue)
+                dockSystemController.setAutoHideEnabled(dockVisibilitySnapshot.isAutoHideEnabled)
+                dockSystemController.reloadDock()
+            }
+            settingsStore.dockVisibilitySnapshot = nil
+        }
     }
 
     @objc private func selectDisplay(_ sender: NSMenuItem) {
@@ -42,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         selectedDisplayID = CGDirectDisplayID(number.uint32Value)
         settingsStore.targetDisplayID = selectedDisplayID
+        lockPolicy.requestTransfer(to: CGDirectDisplayID(number.uint32Value))
         updateProtection()
     }
 
@@ -104,6 +125,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(dockPreferencesDidChange),
+            name: Notification.Name("com.apple.dock.prefchanged"),
+            object: nil
+        )
+        for name in [NSWorkspace.activeSpaceDidChangeNotification,
+                     NSWorkspace.didWakeNotification,
+                     NSWorkspace.didLaunchApplicationNotification,
+                     NSWorkspace.didTerminateApplicationNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(
+                self, selector: #selector(refreshStateFromTimer), name: name, object: nil
+            )
+        }
+    }
+
+    @objc private func dockPreferencesDidChange() {
+        updateProtection()
     }
 
     @objc private func screenParametersDidChange() {
@@ -113,19 +152,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startTimer() {
         updateTimer = Timer.scheduledTimer(
-            timeInterval: 1.0,
+            timeInterval: 0.25,
             target: self,
             selector: #selector(refreshStateFromTimer),
             userInfo: nil,
             repeats: true
         )
+        if let updateTimer {
+            RunLoop.main.add(updateTimer, forMode: .common)
+        }
     }
 
     private func normalizeSelectedDisplay() {
-        let normalized = displayManager.normalizedTargetDisplayID(preferredID: selectedDisplayID)
-        if normalized != selectedDisplayID {
-            selectedDisplayID = normalized
-            settingsStore.targetDisplayID = normalized
+        // Screen/Space transitions must not replace the user's saved selection.
+        if selectedDisplayID == nil {
+            selectedDisplayID = displayManager.normalizedTargetDisplayID(preferredID: nil)
+            settingsStore.targetDisplayID = selectedDisplayID
         }
     }
 
@@ -133,6 +175,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let displays = displayManager.displays
         currentDockDisplayID = dockSystemController.currentDockDisplayID(displays: displays)
         mouseEdgeGuard.update(displays: displays, targetDisplayID: selectedDisplayID, dockEdge: dockEdge)
+        let canFilterEdgeGestures = mouseEdgeGuard.start()
+        let allowSwitching = lockPolicy.allowsSwitching(
+            selectedDisplayID: selectedDisplayID,
+            currentDisplayID: currentDockDisplayID,
+            availableDisplayIDs: Set(displays.map(\.id)),
+            edgeGuardRunning: canFilterEdgeGestures
+        )
+        if dockSystemController.isDisplaySwitchingAllowed != allowSwitching {
+            dockSystemController.setDisplaySwitchingAllowed(allowSwitching)
+        }
+        // Apply the lock before any visibility correction can restart Dock.
+        enforceDockVisibility()
 
         guard let selectedDisplayID else {
             lastStatusMessage = "No display selected"
@@ -140,18 +194,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if currentDockDisplayID == selectedDisplayID {
-            if dockSystemController.isDisplaySwitchingAllowed {
-                dockSystemController.setDisplaySwitchingAllowed(false)
-            }
-        } else {
-            if !dockSystemController.isDisplaySwitchingAllowed {
-                dockSystemController.setDisplaySwitchingAllowed(true)
-            }
-        }
-
-        let canFilterEdgeGestures = mouseEdgeGuard.isRunning || mouseEdgeGuard.start()
-        if currentDockDisplayID == selectedDisplayID {
+        if !displays.contains(where: { $0.id == selectedDisplayID }) {
+            lastStatusMessage = "Selected display unavailable; switching blocked"
+        } else if currentDockDisplayID == selectedDisplayID {
             lastStatusMessage = if canFilterEdgeGestures {
                 "Dock locked to \(displayName(for: selectedDisplayID))"
             } else {
@@ -159,19 +204,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else if currentDockDisplayID == nil {
             lastStatusMessage = if canFilterEdgeGestures {
-                "Dock not detected; switching enabled"
+                "Dock not detected; switching blocked"
             } else {
-                "Accessibility required; switching enabled"
+                "Dock not detected; Accessibility required; switching blocked"
             }
-        } else {
+        } else if allowSwitching {
             lastStatusMessage = if canFilterEdgeGestures {
                 "Move the pointer to the edge of \(displayName(for: selectedDisplayID))"
             } else {
-                "Switching enabled; Accessibility required"
+                "Accessibility required; switching blocked"
             }
+        } else {
+            lastStatusMessage = "Dock on another display; switching blocked; reselect target to move"
         }
 
         refreshMenu()
+    }
+
+    private func enforceDockVisibility() {
+        var needsDockReload = false
+        if dockSystemController.isAutoHideEnabled {
+            dockSystemController.setAutoHideEnabled(false)
+            needsDockReload = true
+        }
+        if dockSystemController.autoHideLockValue != true {
+            dockSystemController.setAutoHideLockValue(true)
+            needsDockReload = true
+        }
+        if needsDockReload {
+            dockSystemController.reloadDock()
+        }
     }
 
     private func refreshMenu() {
