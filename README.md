@@ -1,117 +1,112 @@
 # Fixdock
 
-Fixdock is a macOS menu-bar utility that keeps the Dock on the display selected by the user.
+Fixdock is a macOS menu-bar utility that keeps the Dock on a selected display.
+It blocks Dock edge gestures on other displays and keeps autohide disabled while
+running. Moving the Dock requires one manual edge gesture; Fixdock never moves
+the pointer for you.
 
-## Install with Codex
+## Install
 
-Give Codex this prompt:
+Requires **macOS 14 or later and Apple Silicon**.
 
-> Install Fixdock from https://github.com/vitalyterenin/fixdock. Clone the repository, run `Scripts/install-app.sh`, run `Scripts/verify-install.sh`, and then guide me through enabling only Fixdock under Privacy & Security → Accessibility. Do not enable unrelated permissions.
+1. Download [Fixdock.dmg](https://github.com/vitalyterenin/fixdock/releases/latest/download/Fixdock.dmg).
+2. Open the image, drag Fixdock to Applications, eject the image, and open the installed app.
+3. If macOS blocks the first launch, use **System Settings → Privacy & Security → Open Anyway**.
+4. Choose **Open Accessibility Settings** in the Fixdock menu and enable only Fixdock.
 
-The repository is currently private, so the GitHub account used by Codex must have access to it.
-
-## Install from Terminal
-
-Requirements:
-
-- macOS 14 or later;
-- Xcode Command Line Tools with Swift;
-- access to this repository.
-
-```bash
-git clone https://github.com/vitalyterenin/fixdock.git
-cd fixdock
-Scripts/install-app.sh
-Scripts/verify-install.sh
-```
-
-Fixdock is installed at `/Applications/Fixdock.app` and starts immediately.
-
-### One-time macOS setup
-
-1. Open the Fixdock menu-bar icon.
-2. Choose `Open Accessibility Settings`.
-3. Enable Fixdock under `Privacy & Security → Accessibility`.
-4. Optionally choose `Launch at Login` in the Fixdock menu.
-
-Fixdock never opens the Accessibility permission prompt automatically. Input Monitoring is not required.
-
-## Stable local signing
-
-The first build creates a private self-signed code-signing identity under:
-
-```text
-~/Library/Application Support/Fixdock/Signing
-```
-
-The same identity is reused for later builds on that Mac, so macOS can keep the Accessibility grant instead of treating every rebuild as unrelated code. The private key never belongs in the repository and must not be shared between users.
-
-Signing uses an explicit `codesign --keychain` argument. Setup does not parse or rewrite the user's keychain search list; macOS may register a newly created keychain itself. Run `python3 Scripts/test-signing-isolation.py` to check repeated setup with a mock `security` command, without accessing real credentials.
-
-This local-source installation is intentionally different from distributing a downloadable app binary. A public binary release with the normal Gatekeeper experience requires an Apple Developer ID certificate and notarisation.
+The app uses a persistent self-signed certificate, not Apple Developer ID, and is
+not notarized. You do not need to install or trust a certificate. Accessibility
+enables the event filter; Input Monitoring and Screen Recording are not required.
+Fixdock checks access silently and never opens a permission prompt automatically.
 
 ## Use
 
-Choose the target under `Dock Display` in the menu-bar app.
+Choose a display under **Dock Display**. When the Dock is already there, Fixdock
+locks it. Otherwise, follow the menu status and move the pointer to that display's
+Dock edge once. Arrival consumes the transfer request and locks the Dock again.
+Selecting a display is the only transfer control. **Launch at Login** is optional
+and initially off.
 
-Fixdock can:
+Selection persists locally. A disconnected display remains selected. Missing Dock
+observations, Space/fullscreen transitions, and unexpected display changes keep
+switching blocked. Reselect the target to request a transfer after an unexpected
+move. Without a working Accessibility event tap, the preference lock remains,
+but Fixdock cannot filter gestures or authorize a transfer.
 
-- lock the Dock to the display where it already is;
-- suppress the Dock edge gesture on non-selected displays through Accessibility;
-- enable normal macOS switching when another display is selected;
-- lock the Dock again after one manual edge gesture on the selected display.
+While running, Fixdock disables and locks autohide and filters Option-Command-D
+and Fn-A. External visibility changes can trigger a corrective Dock restart.
+**Quit Fixdock** restores saved autohide settings and allows normal display
+switching. The visibility snapshot survives crashes so the next normal quit can
+restore it. Forced termination cannot perform cleanup.
 
-Only an explicit display selection can start a manual transfer, and it requires
-a working Accessibility event tap and a detected Dock on a connected display.
-Missing Dock observations, fullscreen/Space transitions, and unexpected display
-changes keep switching blocked. A disconnected selected display remains selected;
-Fixdock does not silently replace it. Reselect the target to request a transfer
-if the Dock is already on another display.
+## Updates and removal
 
-Run `swift test` for regressions covering lost observations, unexpected display
-changes, explicit transfers, unavailable protection, edge filtering, and Dock
-hiding shortcuts. These tests do not post input events or move the cursor.
+**Updates → Check for Updates…** checks manually. Automatic checking and installation
+are enabled by default, with checks every four hours while running. Saved choices
+in the Updates submenu take precedence; installation may wait for quit or permission.
+The title shows the running app's version. Feed and archives use Fixdock's own
+Ed25519 key; the app and helpers use its persistent code-signing certificate.
+A previous locally built copy has a different identity and may need its
+Accessibility entry removed and the public copy added once.
 
-While running, Fixdock also disables Dock autohide, locks that preference, and
-suppresses Option-Command-D and Fn-A. If autohide is changed externally, Fixdock
-corrects the preference and restarts Dock to apply it. Normal quit restores the
-visibility settings saved before Fixdock first started; the snapshot survives
-an app crash so the next normal quit can still restore them.
+To uninstall, turn off Launch at Login, quit normally, then remove the app.
+After a crash, reopen Fixdock and quit normally to restore saved visibility.
+These recovery commands reset only display switching, not saved autohide settings:
 
-Fixdock does not automatically move the Dock to another display. The old implementation that moved the visible pointer was removed and must not return. Cursor-free transfer is researched separately under `Experiments/`.
-
-## Build only
-
-```bash
-Scripts/build-app.sh
-```
-
-The app is produced at `.build/app/Fixdock.app`.
-
-## How it works
-
-Fixdock writes the internal `com.apple.dock allow-display-switching` preference and uses an Accessibility event tap to suppress the Dock edge gesture on non-selected displays. It detects the current Dock display from the real Dock window, with private `SLSGetDockRectWithOrientation` as a fallback.
-
-This is not a system-process patch. Apple may change the internal Dock behaviour in future macOS releases.
-
-## Project structure
-
-- `Sources/Fixdock/AppDelegate.swift` — menu-bar UI, display selection, and orchestration.
-- `Sources/Fixdock/MouseEdgeGuard.swift` — Accessibility event tap.
-- `Sources/Fixdock/DockSystemController.swift` — Dock-display detection and preference control.
-- `Sources/Fixdock/DisplayManager.swift` — display list and coordinates.
-- `Scripts/setup-signing.sh` — creates or reuses the per-Mac signing identity.
-- `Scripts/build-app.sh` — builds and signs the app.
-- `Scripts/install-app.sh` — installs and launches the app.
-- `Scripts/verify-install.sh` — verifies the installed bundle and signature.
-
-## Restore normal Dock behaviour
-
-Quit Fixdock from its menu to restore the saved Dock visibility settings and
-allow normal display switching. The following commands only reset display
-switching; they do not restore the saved autohide settings:
-
-```bash
+```sh
 defaults delete com.apple.dock allow-display-switching
 killall Dock
 ```
+
+## Privacy and limitations
+
+Fixdock stores display selection, a visibility snapshot, and update preferences
+in local UserDefaults. The event filter inspects pointer position and shortcut
+key codes without recording or transmitting input. There is no telemetry.
+Updates contact GitHub Pages and GitHub Releases, which receive normal network
+request metadata. System profiling and delta updates are disabled.
+
+The app uses internal Dock preferences, Dock window metadata, and a private
+SkyLight rectangle reader as a fallback. Apple can change those mechanisms.
+Automatic cursor-free relocation is not implemented. The reported PCSX2 shutdown
+case remains unreproduced; see [research history](HANDOFF.md). Experiments are
+excluded from the shipped app.
+
+## Build and test
+
+Requires Apple Silicon, Swift 6+ through Xcode or Command Line Tools, Python 3,
+and network access to resolve pinned Sparkle dependencies. From the repository root:
+
+```sh
+bash Scripts/test.sh
+bash Scripts/build-app.sh
+"$HOME/Library/Developer/Fixdock/Fixdock.app/Contents/MacOS/Fixdock" --diagnostics
+"$HOME/Library/Developer/Fixdock/Fixdock.app/Contents/MacOS/Fixdock" --smoke-test
+```
+
+The default build is ad hoc signed for development and cannot be packaged as a
+public release. Caches and app output stay outside Documents. Overrides are
+`FIXDOCK_BUILD_DIR`, `FIXDOCK_OUTPUT_DIR`, and `FIXDOCK_TOOLS_DIR`. Diagnostics and
+menu validation do not write Dock preferences, monitor input, request permission,
+or check updates. Swift tests inspect local input events without posting them.
+
+For a stable per-Mac source installation:
+
+```sh
+bash Scripts/install-app.sh
+bash Scripts/verify-install.sh
+```
+
+This builds, installs at `/Applications/Fixdock.app`, and launches the app.
+`Scripts/build-local-app.sh` reuses a private per-Mac identity under
+`~/Library/Application Support/Fixdock/Signing`, separate from public releases.
+Never commit or share the key. Signing-isolation tests use mock security tools.
+
+See [release operations](docs/releases.md) and [maintenance constraints](AGENTS.md).
+
+## Support and license
+
+Report reproducible problems in [GitHub Issues](https://github.com/vitalyterenin/fixdock/issues),
+including macOS version, display arrangement, and menu status. Maintained by Vitaly
+Terenin. Fixdock is [MIT licensed](LICENSE); Sparkle retains its own terms in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Both documents ship in the app and DMG.

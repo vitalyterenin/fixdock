@@ -1,52 +1,58 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
-
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="Fixdock"
-CONFIGURATION="${CONFIGURATION:-release}"
-BUILD_DIR="$ROOT_DIR/.build"
-APP_DIR="$BUILD_DIR/app/$APP_NAME.app"
-EXECUTABLE="$BUILD_DIR/$CONFIGURATION/$APP_NAME"
-SIGNING_IDENTITY="${FIXDOCK_CODE_SIGN_IDENTITY:-Fixdock Local Code Signing}"
-
-if [[ "$(uname -s)" != "Darwin" ]]; then
-    echo "error: Fixdock can only be built on macOS" >&2
-    exit 1
-fi
-
-for required_command in swift security codesign; do
-    if ! command -v "$required_command" >/dev/null 2>&1; then
-        echo "error: required command '$required_command' is unavailable; install Xcode Command Line Tools" >&2
-        exit 1
+cd "$(dirname "$0")/.."
+# Keep build caches outside the Documents file provider.
+build_dir="${FIXDOCK_BUILD_DIR:-$HOME/Library/Developer/Fixdock/Build}"
+build_args=(--scratch-path "$build_dir" -c release --arch arm64)
+swift build "${build_args[@]}"
+binary_dir="$(swift build "${build_args[@]}" --show-bin-path)"
+# Keep the signed bundle outside Documents: its file provider adds FinderInfo
+# again after signing and invalidates the bundle signature.
+output_dir="${FIXDOCK_OUTPUT_DIR:-$HOME/Library/Developer/Fixdock}"
+mkdir -p "$output_dir"
+staging="$(mktemp -d "$output_dir/.fixdock-build.XXXXXX")"
+trap 'rm -rf "$staging"' EXIT
+app_dir="$staging/Fixdock.app"
+mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Frameworks"
+cp "$binary_dir/Fixdock" "$app_dir/Contents/MacOS/Fixdock"
+framework="$(python3 - "$build_dir" <<'PY'
+import pathlib,sys
+matches=list(pathlib.Path(sys.argv[1], 'artifacts').glob('**/macos-*/Sparkle.framework'))
+if len(matches)!=1: raise SystemExit(f'Expected one Sparkle framework, found {len(matches)}')
+print(matches[0])
+PY
+)"
+ditto "$framework" "$app_dir/Contents/Frameworks/Sparkle.framework"
+# This app is not sandboxed, so these optional Sparkle services are unused.
+rm -rf "$app_dir/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices"
+sparkle="$app_dir/Contents/Frameworks/Sparkle.framework"
+# Ship only Apple Silicon slices, including Sparkle's prebuilt helper tools.
+for executable in "$sparkle/Versions/B/Sparkle" "$sparkle/Versions/B/Autoupdate" \
+    "$sparkle/Versions/B/Updater.app/Contents/MacOS/Updater"; do
+    if [[ "$(lipo -archs "$executable")" != arm64 ]]; then
+        lipo "$executable" -thin arm64 -output "$executable.arm64"
+        mv "$executable.arm64" "$executable"
     fi
 done
-
-if [[ -n "${FIXDOCK_CODE_SIGN_KEYCHAIN:-}" ]]; then
-    SIGNING_KEYCHAIN="$FIXDOCK_CODE_SIGN_KEYCHAIN"
-else
-    SIGNING_KEYCHAIN="$("$ROOT_DIR/Scripts/setup-signing.sh")"
-fi
-
-cd "$ROOT_DIR"
-swift build -c "$CONFIGURATION"
-
-rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS"
-cp "$ROOT_DIR/Packaging/Info.plist" "$APP_DIR/Contents/Info.plist"
-cp "$EXECUTABLE" "$APP_DIR/Contents/MacOS/$APP_NAME"
-chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
-
-security unlock-keychain -p "${FIXDOCK_CODE_SIGN_KEYCHAIN_PASSWORD:-}" "$SIGNING_KEYCHAIN"
-SIGNING_CERTIFICATE_SHA1="$(
-    security find-certificate -c "$SIGNING_IDENTITY" -Z "$SIGNING_KEYCHAIN" \
-        | awk '/SHA-1 hash:/ { print $3; exit }'
-)"
-
-if [[ -z "$SIGNING_CERTIFICATE_SHA1" ]]; then
-    echo "error: Fixdock signing certificate not found in $SIGNING_KEYCHAIN" >&2
-    exit 1
-fi
-
-codesign --force --options runtime --sign "$SIGNING_CERTIFICATE_SHA1" --keychain "$SIGNING_KEYCHAIN" "$APP_DIR" >/dev/null
-
-echo "$APP_DIR"
+python3 Scripts/release.py plist "$app_dir/Contents/Info.plist"
+mkdir -p "$app_dir/Contents/Resources"
+cp Resources/PrivacyInfo.xcprivacy "$app_dir/Contents/Resources/PrivacyInfo.xcprivacy"
+python3 Scripts/licenses.py install --app "$app_dir" \
+    --sparkle-license "$build_dir/checkouts/Sparkle/LICENSE"
+# Compile all standard and Retina icon sizes from the approved transparent source.
+iconset="$staging/AppIcon.iconset"
+mkdir -p "$iconset"
+for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" Resources/AppIcon.png --out "$iconset/icon_${size}x${size}.png" >/dev/null
+    retina=$((size * 2))
+    sips -z "$retina" "$retina" Resources/AppIcon.png --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil --convert icns "$iconset" --output "$app_dir/Contents/Resources/AppIcon.icns"
+# Finder / file providers may add this attribute to an existing generated bundle.
+# Remove only Finder metadata; do not remove quarantine or other security metadata.
+xattr -dr com.apple.FinderInfo "$app_dir" 2>/dev/null || true
+python3 Scripts/signing.py sign --app "$app_dir"
+destination="$output_dir/Fixdock.app"
+if [[ -e "$destination" ]]; then rm -rf "$destination"; fi
+mv "$app_dir" "$destination"
+printf 'Built: %s\n' "$destination"

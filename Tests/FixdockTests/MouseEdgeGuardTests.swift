@@ -1,8 +1,8 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import Fixdock
 
-final class MouseEdgeGuardTests: XCTestCase {
+struct MouseEdgeGuardTests {
     private let display = DisplayInfo(
         id: 2, name: "Other display",
         appKitFrame: CGRect(x: 100, y: 100, width: 100, height: 100),
@@ -18,14 +18,14 @@ final class MouseEdgeGuardTests: XCTestCase {
 
     // Events are inspected locally; nothing is posted to the system or cursor.
     private func isSuppressed(_ guardInstance: MouseEdgeGuard, at point: CGPoint) throws -> Bool {
-        let event = try XCTUnwrap(CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
+        let event = try #require(CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
                                           mouseCursorPosition: point, mouseButton: .left))
         return withExtendedLifetime(event) {
             guardInstance.handle(type: .mouseMoved, event: event) == nil
         }
     }
 
-    func testFirstEventAtEveryForbiddenEdgeIsSuppressed() throws {
+    @Test func testFirstEventAtEveryForbiddenEdgeIsSuppressed() throws {
         let points: [(DockEdge, CGPoint)] = [
             (.bottom, CGPoint(x: 150, y: 199)),
             (.top, CGPoint(x: 150, y: 100)),
@@ -34,40 +34,39 @@ final class MouseEdgeGuardTests: XCTestCase {
         ]
         for (edge, point) in points {
             let guardInstance = guardFor(edge: edge)
-            XCTAssertTrue(try isSuppressed(guardInstance, at: point),
-                         "First event should be blocked at \(edge)")
+            #expect(try isSuppressed(guardInstance, at: point), "First event should be blocked at \(edge)")
         }
     }
 
-    func testPointsOutsideDisplayAndAwayFromEdgePassThrough() throws {
+    @Test func testPointsOutsideDisplayAndAwayFromEdgePassThrough() throws {
         let guardInstance = guardFor()
         for point in [CGPoint(x: 150, y: 250), CGPoint(x: 50, y: 199),
                       CGPoint(x: 250, y: 199), CGPoint(x: 150, y: 150)] {
-            XCTAssertFalse(try isSuppressed(guardInstance, at: point))
+            #expect(!(try isSuppressed(guardInstance, at: point)))
         }
     }
 
-    func testSelectedDisplayAndMissingTargetPassThrough() throws {
+    @Test func testSelectedDisplayAndMissingTargetPassThrough() throws {
         for target: UInt32? in [2, nil] {
             let guardInstance = guardFor(target: target)
-            XCTAssertFalse(try isSuppressed(guardInstance, at: CGPoint(x: 150, y: 199)))
+            #expect(!(try isSuppressed(guardInstance, at: CGPoint(x: 150, y: 199))))
         }
     }
 
-    func testMovingAwayFromEdgePassesThrough() throws {
+    @Test func testMovingAwayFromEdgePassesThrough() throws {
         let guardInstance = guardFor()
-        XCTAssertTrue(try isSuppressed(guardInstance, at: CGPoint(x: 150, y: 199)))
-        XCTAssertFalse(try isSuppressed(guardInstance, at: CGPoint(x: 150, y: 198)))
+        #expect(try isSuppressed(guardInstance, at: CGPoint(x: 150, y: 199)))
+        #expect(!(try isSuppressed(guardInstance, at: CGPoint(x: 150, y: 198))))
     }
 
-    func testStopDiscardsStalePointerLocation() throws {
+    @Test func testStopDiscardsStalePointerLocation() throws {
         let guardInstance = guardFor()
         _ = try isSuppressed(guardInstance, at: CGPoint(x: 150, y: 250))
         guardInstance.stop()
-        XCTAssertTrue(try isSuppressed(guardInstance, at: CGPoint(x: 150, y: 199)))
+        #expect(try isSuppressed(guardInstance, at: CGPoint(x: 150, y: 199)))
     }
 
-    func testOnlyDockHidingShortcutsAreSuppressed() throws {
+    @Test func testOnlyDockHidingShortcutsAreSuppressed() throws {
         let guardInstance = guardFor()
         let cases: [(Int64, CGEventFlags, Bool)] = [
             (2, [.maskCommand, .maskAlternate], true),
@@ -79,12 +78,11 @@ final class MouseEdgeGuardTests: XCTestCase {
         ]
         for (keyCode, flags, suppressed) in cases {
             for type in [CGEventType.keyDown, .keyUp] {
-                let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil,
+                let event = try #require(CGEvent(keyboardEventSource: nil,
                                                   virtualKey: CGKeyCode(keyCode),
                                                   keyDown: type == .keyDown))
                 event.flags = flags
-                XCTAssertEqual(guardInstance.handle(type: type, event: event) == nil, suppressed,
-                               "key=\(keyCode), flags=\(flags), type=\(type)")
+                #expect((guardInstance.handle(type: type, event: event) == nil) == suppressed, "key=\(keyCode), flags=\(flags), type=\(type)")
             }
         }
     }

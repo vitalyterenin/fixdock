@@ -14,10 +14,12 @@ The endpoint exists, but minimal dictionary messages do not yet follow Dock's ac
 
 This experiment has not demonstrated a working cursor-free Dock transfer and must not move into production.
 
+Run commands from the Fixdock repository root. These experiments are not shipped.
+
 ## Read-only run
 
 ```bash
-cd /Users/vitalyterenin/Projects/Personal/fixdock/Experiments/DockSidecarProbe
+cd Experiments/DockSidecarProbe
 swift run DockSidecarProbe
 ```
 

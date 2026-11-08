@@ -1,7 +1,7 @@
-import XCTest
+import Testing
 @testable import Fixdock
 
-final class DockLockPolicyTests: XCTestCase {
+struct DockLockPolicyTests {
     private let displays: Set<UInt32> = [1, 2]
 
     private func allowed(_ policy: inout DockLockPolicy, current: UInt32?, target: UInt32? = 1,
@@ -10,43 +10,43 @@ final class DockLockPolicyTests: XCTestCase {
                                availableDisplayIDs: available ?? displays, edgeGuardRunning: guardRunning)
     }
 
-    func testFullscreenObservationLossNeverUnlocks() {
+    @Test func testFullscreenObservationLossNeverUnlocks() {
         var policy = DockLockPolicy()
         for current: UInt32? in [1, nil, nil, 2, nil, 1] {
-            XCTAssertFalse(allowed(&policy, current: current))
+            #expect(!(allowed(&policy, current: current)))
         }
     }
 
-    func testUnexpectedOtherDisplayAtLaunchStaysLocked() {
+    @Test func testUnexpectedOtherDisplayAtLaunchStaysLocked() {
         var policy = DockLockPolicy()
-        XCTAssertFalse(allowed(&policy, current: 2))
+        #expect(!(allowed(&policy, current: 2)))
     }
 
-    func testExplicitTransferRelocksPermanentlyOnArrival() {
+    @Test func testExplicitTransferRelocksPermanentlyOnArrival() {
         var policy = DockLockPolicy()
         policy.requestTransfer(to: 2)
-        XCTAssertTrue(allowed(&policy, current: 1, target: 2))
-        XCTAssertFalse(allowed(&policy, current: nil, target: 2))
-        XCTAssertTrue(allowed(&policy, current: 1, target: 2))
-        XCTAssertFalse(allowed(&policy, current: 2, target: 2))
-        XCTAssertNil(policy.pendingDisplayID)
+        #expect(allowed(&policy, current: 1, target: 2))
+        #expect(!(allowed(&policy, current: nil, target: 2)))
+        #expect(allowed(&policy, current: 1, target: 2))
+        #expect(!(allowed(&policy, current: 2, target: 2)))
+        #expect(policy.pendingDisplayID == nil)
         for current: UInt32? in [nil, 1, 2] {
-            XCTAssertFalse(allowed(&policy, current: current, target: 2))
+            #expect(!(allowed(&policy, current: current, target: 2)))
         }
     }
 
-    func testTransferRequiresLiveGuardAndKnownConnectedDisplays() {
+    @Test func testTransferRequiresLiveGuardAndKnownConnectedDisplays() {
         var policy = DockLockPolicy()
         policy.requestTransfer(to: 2)
-        XCTAssertFalse(allowed(&policy, current: 1, target: 2, guardRunning: false))
-        XCTAssertFalse(allowed(&policy, current: 1, target: 2, available: [1]))
-        XCTAssertFalse(allowed(&policy, current: 99, target: 2))
-        XCTAssertFalse(allowed(&policy, current: 1, target: nil))
+        #expect(!(allowed(&policy, current: 1, target: 2, guardRunning: false)))
+        #expect(!(allowed(&policy, current: 1, target: 2, available: [1])))
+        #expect(!(allowed(&policy, current: 99, target: 2)))
+        #expect(!(allowed(&policy, current: 1, target: nil)))
     }
 
-    func testTransferRequestDoesNotAuthorizeAnotherTarget() {
+    @Test func testTransferRequestDoesNotAuthorizeAnotherTarget() {
         var policy = DockLockPolicy()
         policy.requestTransfer(to: 2)
-        XCTAssertFalse(allowed(&policy, current: 2, target: 1))
+        #expect(!(allowed(&policy, current: 2, target: 1)))
     }
 }

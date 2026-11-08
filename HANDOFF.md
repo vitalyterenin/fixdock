@@ -1,5 +1,14 @@
 # Fixdock handoff
 
+## Current distribution
+
+The project now supports a public MIT-licensed Apple Silicon DMG and signed
+Sparkle updates. See [README](README.md) for installation and current behavior,
+[release operations](docs/releases.md) for publication, and [AGENTS](AGENTS.md) for
+maintenance constraints. Earlier local paths/build instructions below are historical.
+Automatic cursor-free transfer and the exact PCSX2 shutdown reproduction remain
+unresolved; this release does not claim to solve them.
+
 ## Publication review
 
 2026-11-08T12:25:43+01:00 — reviewed the local changes for publication to
@@ -56,7 +65,7 @@ restriction below; restarting Dock must never be used to transfer it.
 Project path:
 
 ```bash
-/Users/vitalyterenin/Projects/Personal/fixdock
+~/Developer/fixdock
 ```
 
 Installed app:
@@ -70,7 +79,7 @@ Bundle ID: `local.vitalyterenin.Fixdock`.
 Build and install:
 
 ```bash
-cd /Users/vitalyterenin/Projects/Personal/fixdock
+cd ~/Developer/fixdock
 Scripts/install-app.sh
 ```
 
