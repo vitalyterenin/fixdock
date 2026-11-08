@@ -7,7 +7,6 @@
   "feedURL": "https://vitalyterenin.github.io/fixdock/appcast.xml",
   "downloadURL": "https://github.com/vitalyterenin/fixdock/releases/latest/download/Fixdock.dmg",
   "publicEDKey": "BjyG3VJM+YZI9tyGpO8O1ZJoy0FOvGAglQT8OnrcLUA=",
-  "legacyFeedURLs": [],
   "license": "MIT",
   "codeSigningCertificateSHA256": "3585a08f31e051a617973850182f9123a470fe6436a16f05d22e157cac5ed6c5"
 }
